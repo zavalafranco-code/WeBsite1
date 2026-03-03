@@ -1,0 +1,282 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://coord-umt2mtrs.netlify.app/</loc>
+    <lastmod>2026-03-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+
+<style>
+body {
+    background-color: #f7ebc4;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.container {
+    width: 760px;
+    margin: 30px auto;
+    text-align: center;
+}
+
+h2 {
+    margin-bottom: 8px;
+}
+
+.description {
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+.panels {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.panel {
+    width: 300px;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.geo {
+    background-color: #008cff;
+    color: white;
+}
+
+.utm {
+    background-color: #f1a800;
+    color: black;
+}
+
+.panel h3 {
+    margin-top: 0;
+}
+
+.field {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+label {
+    display: inline-block;
+    width: 90px;
+}
+
+input {
+    width: 170px;
+    padding: 4px;
+}
+
+.buttons {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+}
+
+button {
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.error {
+    margin-top: 15px;
+    color: red;
+    font-weight: bold;
+}
+</style>
+
+
+<body>
+
+<div class="container">
+    <h2>Conversor de coordenadas</h2>
+    <div class="description">
+        Coordenadas geográficas en grados decimales.<br>
+        Valores negativos indican Oeste y Sur.<br>
+        Coordenadas UTM en metros – Elipsoide <b>WGS84</b>.
+    </div>
+
+    <div class="panels">
+
+        <div class="panel geo">
+            <h3>Geográficas</h3>
+            <div class="field">
+                <label>Longitud:</label>
+                <input type="number" id="lon" step="any">
+            </div>
+            <div class="field">
+                <label>Latitud:</label>
+                <input type="number" id="lat" step="any">
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button onclick="geoToUTM()">➡</button>
+            <button onclick="utmToGeo()">⬅</button>
+        </div>
+
+        <div class="panel utm">
+            <h3>UTM</h3>
+            <div class="field">
+                <label>X:</label>
+                <input type="number" id="x">
+            </div>
+            <div class="field">
+                <label>Y:</label>
+                <input type="number" id="y">
+            </div>
+            <div class="field">
+                <label>Zona:</label>
+                <input type="text" id="zone">
+            </div>
+            <div class="field">
+    <label>Hemisf.:</label>
+    <input type="text" id="hemisphere">
+</div>
+
+        </div>
+
+    </div>
+
+    <div id="error" class="error"></div>
+</div>
+
+<script>
+// Constantes WGS84
+const a = 6378137.0;
+const f = 1 / 298.257223563;
+const k0 = 0.9996;
+const e = Math.sqrt(f * (2 - f));
+
+// Letras UTM
+const utmLetters = "CDEFGHJKLMNPQRSTUVWXX";
+
+// Utilidades
+function showError(msg) {
+    document.getElementById("error").innerText = msg;
+}
+
+function clearError() {
+    document.getElementById("error").innerText = "";
+}
+
+function getUTMLetter(lat) {
+    if (lat < -80 || lat > 84) return null;
+    return utmLetters[Math.floor((lat + 80) / 8)];
+}
+
+// Geográficas → UTM
+function geoToUTM() {
+    clearError();
+
+    const lat = parseFloat(document.getElementById("lat").value);
+    const lon = parseFloat(document.getElementById("lon").value);
+
+    if (isNaN(lat) || isNaN(lon)) {
+        showError("Debe ingresar latitud y longitud.");
+        return;
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        showError("Latitud o longitud fuera de rango válido.");
+        return;
+    }
+
+    const zoneNumber = Math.floor((lon + 180) / 6) + 1;
+    const zoneLetter = getUTMLetter(lat);
+
+    if (!zoneLetter) {
+        showError("Latitud fuera del rango UTM.");
+        return;
+    }
+
+    const λ0 = ((zoneNumber - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const φ = lat * Math.PI / 180;
+    const λ = lon * Math.PI / 180;
+
+    const N = a / Math.sqrt(1 - Math.pow(e * Math.sin(φ), 2));
+    const T = Math.pow(Math.tan(φ), 2);
+    const C = (Math.pow(e, 2) / (1 - Math.pow(e, 2))) * Math.pow(Math.cos(φ), 2);
+    const A = Math.cos(φ) * (λ - λ0);
+
+    const M = a * (
+        (1 - e*e/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256) * φ
+        - (3*e*e/8 + 3*Math.pow(e,4)/32 + 45*Math.pow(e,6)/1024) * Math.sin(2*φ)
+        + (15*Math.pow(e,4)/256 + 45*Math.pow(e,6)/1024) * Math.sin(4*φ)
+        - (35*Math.pow(e,6)/3072) * Math.sin(6*φ)
+    );
+
+    let x = k0 * N * (A + (1 - T + C) * Math.pow(A,3) / 6);
+    let y = k0 * (M + N * Math.tan(φ) * Math.pow(A,2) / 2);
+
+    x += 500000;
+    if (lat < 0) y += 10000000;
+
+    document.getElementById("x").value = x.toFixed(3);
+    document.getElementById("y").value = y.toFixed(3);
+    document.getElementById("zone").value = zoneNumber + zoneLetter;
+
+    document.getElementById("hemisphere").value = lat >= 0 ? "N" : "S";
+
+}
+
+// UTM → Geográficas
+function utmToGeo() {
+    const hemisphere = document.getElementById("hemisphere").value.toUpperCase();
+
+if (hemisphere !== "N" && hemisphere !== "S") {
+    showError("Hemisferio inválido. Use N o S.");
+    return;
+}
+
+    clearError();
+
+    const xInput = parseFloat(document.getElementById("x").value);
+    const yInput = parseFloat(document.getElementById("y").value);
+    const zoneInput = document.getElementById("zone").value.toUpperCase();
+
+    if (isNaN(xInput) || isNaN(yInput) || zoneInput.length < 2) {
+        showError("Debe ingresar X, Y y la zona UTM completa.");
+        return;
+    }
+
+    const zoneNumber = parseInt(zoneInput);
+    const zoneLetter = zoneInput.replace(zoneNumber, "");
+
+    if (!utmLetters.includes(zoneLetter)) {
+        showError("Letra de zona UTM inválida.");
+        return;
+    }
+
+    let x = xInput - 500000;
+    let y = yInput;
+
+    if (hemisphere === "S") y -= 10000000;
+
+    const λ0 = ((zoneNumber - 1) * 6 - 180 + 3) * Math.PI / 180;
+    const M = y / k0;
+
+    const μ = M / (a * (1 - e*e/4 - 3*Math.pow(e,4)/64));
+    let φ1 = μ;
+
+    const N1 = a / Math.sqrt(1 - Math.pow(e * Math.sin(φ1),2));
+    const T1 = Math.pow(Math.tan(φ1),2);
+    const C1 = (Math.pow(e,2)/(1 - Math.pow(e,2))) * Math.pow(Math.cos(φ1),2);
+    const R1 = a * (1 - e*e) / Math.pow(1 - Math.pow(e*Math.sin(φ1),2), 1.5);
+    const D = x / (N1 * k0);
+
+    const lat = φ1 - (N1 * Math.tan(φ1) / R1) * (Math.pow(D,2)/2);
+    const lon = λ0 + D / Math.cos(φ1);
+
+    document.getElementById("lat").value = (lat * 180 / Math.PI).toFixed(8);
+    document.getElementById("lon").value = (lon * 180 / Math.PI).toFixed(8);
+}
+</script>
+
+</body>
+</html>
